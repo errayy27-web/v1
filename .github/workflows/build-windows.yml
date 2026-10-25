@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'SS_OIL_V1_8767_HTTP401_DUZELTME.zip'
+      - 'patch_sync.py'
       - '.github/workflows/build-windows.yml'
 jobs:
   build:
@@ -17,6 +18,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Apply independent sync fix
+        run: python patch_sync.py
       - name: Verify source
         shell: pwsh
         run: python -m py_compile source/SS_OIL_SMJENE.py
