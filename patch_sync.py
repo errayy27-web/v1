@@ -21,6 +21,31 @@ s=s[:a]+replacement+s[b:]
 needle='            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)'
 assert needle in s
 s=s.replace(needle,needle+'\n            entry.bind("<Return>",lambda e,w=entry: (w.tk_focusNext().focus_set(),"break")[-1])',1)
+
+# Restore admin reset control without changing stored shift data.
+if "def admin_reset(self):" not in s:
+    s=s.replace("import tkinter as tk","import tkinter as tk\nimport hashlib, hmac",1)
+    admin='''    def admin_reset(self):
+        from tkinter import simpledialog, messagebox
+        n=simpledialog.askinteger("Administrator","Broj smjene (1-3):",parent=self,minvalue=1,maxvalue=3)
+        if n is None:return
+        pin=simpledialog.askstring("Administrator","PIN:",parent=self,show="*")
+        if pin is None:return
+        if not hmac.compare_digest(hashlib.sha256(pin.encode()).digest(),hashlib.sha256(b"3729").digest()):
+            messagebox.showerror("Greška","Pogrešan PIN.",parent=self)
+            return
+        if not messagebox.askyesno("Potvrda","Resetovati prava čuvanja (0/2)? Podaci ostaju.",parent=self):return
+        with self.db:
+            self.db.execute("UPDATE shifts SET save_count=0 WHERE business_date=? AND shift=?",(self.selected.isoformat(),n))
+        self.panels[n-1].load()
+
+'''
+    assert "    def poll_sync(self):" in s
+    s=s.replace("    def poll_sync(self):",admin+"    def poll_sync(self):",1)
+if 'text="ADMIN RESET"' not in s:
+    anchor='        ttk.Button(head,text="MERKEZ 8767",command=self.server_settings).pack(side="right",padx=(7,0))'
+    assert anchor in s
+    s=s.replace(anchor,anchor+'\n        ttk.Button(head,text="ADMIN RESET",command=self.admin_reset).pack(side="right",padx=(7,0))',1)
 ast.parse(s)
 p.write_text(s,encoding="utf-8")
 print("V1 send-only patch validated")
