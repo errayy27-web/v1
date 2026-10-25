@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'SS_OIL_V1_8767_SACUVAJ.zip'
+      - 'SS_OIL_V1_MERKEZ_8767_ENTEGRE.zip'
       - '.github/workflows/build-windows.yml'
 jobs:
   build:
@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract V1 source
         shell: pwsh
-        run: Expand-Archive -LiteralPath "SS_OIL_V1_8767_SACUVAJ.zip" -DestinationPath "source" -Force
+        run: Expand-Archive -LiteralPath "SS_OIL_V1_MERKEZ_8767_ENTEGRE.zip" -DestinationPath "source" -Force
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
