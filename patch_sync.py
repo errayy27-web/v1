@@ -78,3 +78,37 @@ if 'synced_employee' not in s:
     s=s.replace('0 if state in ("sent","remote") else int(item["pending_send"])))', '0 if state in ("sent","remote") else int(item["pending_send"]),remote_worker))',1)
 p.write_text(s,encoding="utf-8")
 print("Patch completed")
+
+# On an HTTP 409, refresh the authoritative center state rather than showing
+# a permanent startup error or retrying the same stale revision blindly.
+# The center is the only write path; no SQL/Supabase direct access.
+p=Path("source/SS_OIL_SMJENE.py")
+s=p.read_text(encoding="utf-8")
+needle='''        except urllib.error.HTTPError as exc:
+            msg=("401: token yanlış veya merkez tokenı değişmiş" if exc.code==401 else f"HTTP {exc.code}")
+            try:self.after(0,lambda:self._apply_sync(business_date,[],msg))
+            except RuntimeError:pass'''
+replacement='''        except urllib.error.HTTPError as exc:
+            if exc.code==409:
+                try:
+                    latest=request("GET",base+"?"+query)
+                    if not isinstance(latest,list):
+                        raise ValueError("Neispravan odgovor centra")
+                    by_number={int(x.get("shift_number",0)):x for x in latest if isinstance(x,dict)}
+                    refreshed=[(item,"remote",by_number[item["shift"]]) for item in snapshot if item["shift"] in by_number]
+                    refreshed += [(item,"waiting",None) for item in snapshot if item["shift"] not in by_number]
+                    self.after(0,lambda results=refreshed:self._apply_sync(business_date,results,None))
+                except Exception as conflict_exc:
+                    msg="409: "+str(conflict_exc)[:110]
+                    try:self.after(0,lambda msg=msg:self._apply_sync(business_date,[],msg))
+                    except RuntimeError:pass
+            else:
+                msg=("401: token yanlış veya merkez tokenı değişmiş" if exc.code==401 else f"HTTP {exc.code}")
+                try:self.after(0,lambda msg=msg:self._apply_sync(business_date,[],msg))
+                except RuntimeError:pass'''
+assert s.count(needle)==1,"409 handler source mismatch"
+s=s.replace(needle,replacement)
+import ast
+ast.parse(s)
+p.write_text(s,encoding="utf-8")
+print("V1 409 conflict refresh installed; local history retained")
