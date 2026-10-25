@@ -112,3 +112,66 @@ import ast
 ast.parse(s)
 p.write_text(s,encoding="utf-8")
 print("V1 409 conflict refresh installed; local history retained")
+
+# V1 SEND-ONLY: never import phone/center values into the cash counter.
+p=Path("source/SS_OIL_SMJENE.py")
+s=p.read_text(encoding="utf-8")
+# Enter moves to the next denomination in the same shift.
+s=s.replace('        for i,d in enumerate(DENOMS,1):','        entry_order=[]\n        for i,d in enumerate(DENOMS,1):',1)
+s=s.replace('            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)','            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)\n            entry_order.append(entry)',1)
+s=s.replace('        foot=tk.Frame(self,bg="#f5f8fc",padx=6,pady=3)','        for i,entry in enumerate(entry_order[:-1]):\n            entry.bind("<Return>",lambda e,next_entry=entry_order[i+1]: (next_entry.focus_set(),next_entry.select_range(0,"end"),"break")[-1])\n        foot=tk.Frame(self,bg="#f5f8fc",padx=6,pady=3)',1)
+# No remote fetch, no remote corrections, no backflow to V1. Only send confirmed saves.
+start=s.index('    def _sync_thread(self,host,business_date,snapshot):')
+end=s.index('    def close(self):',start)
+replacement='''    def _sync_thread(self,host,business_date,snapshot,token):
+        """Send-only V1. Center receives name + counted cash; never read into V1."""
+        try:
+            if not token: raise RuntimeError("Merkez token nije podešen")
+            base=f"http://{host}:8767/vardiya/ssoil_shift_handoffs"
+            def request(method,url,payload):
+                data=json.dumps(payload,ensure_ascii=False).encode("utf-8")
+                req=urllib.request.Request(url,data=data,headers={"Content-Type":"application/json","X-SSOIL-Token":token},method=method)
+                with urllib.request.urlopen(req,timeout=8) as response:
+                    return json.load(response)
+            results=[]
+            for item in snapshot:
+                if not item["pending_send"] or not item["confirmed_total"]:continue
+                payload={"id":item["remote_id"] or str(uuid.uuid5(uuid.NAMESPACE_URL,f"ssoil-v1:{business_date}:{item['shift']}")),
+                         "business_date":business_date,"shift_number":item["shift"],
+                         "employee_name":item["locked_worker"] or item["employee"],
+                         "delivered_cash":float(number(item["confirmed_total"])),
+                         "snapshot":{"source":"v1_cash_counter"},"status":"closed"}
+                # Center handles upsert and Supabase delivery.
+                response=request("POST",base,payload)
+                if not isinstance(response,list) or not response:raise RuntimeError("Centar nije potvrdio unos")
+                results.append((item,response[0]))
+            self.after(0,lambda:self._apply_sync(business_date,results,None))
+        except Exception as exc:
+            msg=str(exc)[:180]
+            try:self.after(0,lambda:self._apply_sync(business_date,[],msg))
+            except RuntimeError:pass
+
+    def _apply_sync(self,business_date,results,error):
+        self.sync_running=False
+        if error:
+            self.status.set("8767 greška: "+error[:90])
+            return
+        if self.selected.isoformat()!=business_date:return
+        self.status.set("PC Merkez 8767 • povezano")
+        for item,ack in results:
+            panel=self.panels[item["shift"]-1]
+            if panel.last_local_edit!=item["local_edit"]:continue
+            with self.db:
+                self.db.execute("UPDATE shifts SET pending_send=0,remote_id=? WHERE business_date=? AND shift=? AND confirmed_total=?",
+                    (str(ack.get("id") or item["remote_id"]),business_date,item["shift"],item["confirmed_total"]))
+            panel.remote_label.set("Primljeno u PC centar • čeka Supabase")
+'''
+s=s[:start]+replacement+s[end:]
+s=s.replace('args=(host,business_date,snapshot,center_token(self.db)),daemon=True','args=(host,business_date,snapshot,center_token(self.db)),daemon=True')
+# Suppress legacy remote corrections when loading local saved counts.
+s=s.replace('self.remote_label.set(("ISPRAVKA S TELEFONA: "+fmt(number(r[3]))+" KM • važeći iznos") if r and r[3] else "")','self.remote_label.set("")')
+# Avoid background SQLite calls and retain the old 2-save lock.
+import ast
+ast.parse(s)
+p.write_text(s,encoding="utf-8")
+print("Send-only V1 patch complete")
