@@ -89,6 +89,44 @@ assert needle in s
 s=s.replace(needle,'                elif (not baseline and not item["pending_send"]) or (baseline and number(remote_total)!=number(baseline)):',1)
 worker=s.split('    def _sync_thread(',1)[1].split('    def _apply_sync(',1)[0]
 assert 'self.db' not in worker and 'self.after(' not in worker
+
+# Responsive layout: bottom controls are packed first, so SAVE stays visible.
+start=s.index('        tbl=tk.Frame(self,bg="white",padx=6)')
+end=s.index('    def summary(self,parent,label,var,strong=False):',start)
+section=s[start:end]
+foot_at=section.index('        foot=tk.Frame(self,bg="#f5f8fc",padx=6,pady=3)')
+tbl_part=section[:foot_at]
+foot_part=section[foot_at:]
+# Add the footer before the expanding table; preserve all existing controls.
+foot_part=foot_part.replace('foot.pack(fill="x",side="bottom")','foot.pack(side="bottom",fill="x")')
+tbl_part=tbl_part.replace('tbl.pack(fill="both",expand=True)','tbl.pack(side="top",fill="both",expand=True)')
+# Scrollable table for narrow/short windows.
+tbl_part=tbl_part.replace('        tbl=tk.Frame(self,bg="white",padx=6)\n        tbl.pack(side="top",fill="both",expand=True)',
+'''        table_host=tk.Frame(self,bg="white")
+        table_host.pack(side="top",fill="both",expand=True)
+        canvas=tk.Canvas(table_host,bg="white",highlightthickness=0)
+        scrollbar=ttk.Scrollbar(table_host,orient="vertical",command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right",fill="y")
+        canvas.pack(side="left",fill="both",expand=True)
+        tbl=tk.Frame(canvas,bg="white",padx=4)
+        table_window=canvas.create_window((0,0),window=tbl,anchor="nw")
+        tbl.bind("<Configure>",lambda e:canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",lambda e:canvas.itemconfigure(table_window,width=e.width))''')
+assert 'table_window=canvas.create_window' in tbl_part
+s=s[:start]+foot_part+tbl_part+s[end:]
+# More compact window and flexible width; no clipped Save buttons.
+s=s.replace('self.geometry("950x590")','self.geometry("1100x710")')
+s=s.replace('self.minsize(760,540)','self.minsize(690,390)')
+s=s.replace('font=("Segoe UI",15,"bold")','font=("Segoe UI",12,"bold")')
+s=s.replace('padx=(18,3)','padx=(5,2)')
+s=s.replace('padx=10,pady=7','padx=5,pady=3')
+s=s.replace('padx=8,pady=4','padx=3,pady=2')
+# Avoid long status taking away room from date/action buttons.
+s=s.replace('tk.Label(head,textvariable=self.status,bg="#eef2f7",fg="#63758b",font=("Segoe UI",8)).pack(side="right")',
+'''statusbar=tk.Label(self,textvariable=self.status,bg="#eef2f7",fg="#63758b",font=("Segoe UI",8),anchor="w")
+        statusbar.pack(side="bottom",fill="x",padx=5)''')
+
 p.write_text(s,encoding="utf-8")
 print("V1 sync thread patch applied")
 
