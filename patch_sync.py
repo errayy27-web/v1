@@ -3,6 +3,8 @@ p=Path("source/SS_OIL_SMJENE.py")
 s=p.read_text(encoding="utf-8")
 if "import hashlib, hmac" not in s:
     s=s.replace("import sqlite3, os, json,", "import hashlib, hmac\nimport sqlite3, os, json,", 1)
+if 'import queue' not in s:
+    s=s.replace('import hashlib, hmac','import hashlib, hmac, queue',1)
 if "def manual_sync(self):" not in s:
     s=s.replace("    def poll_sync(self):", '    def manual_sync(self):\n        self.status.set("Provjera veze sa PC centrom...")\n        self.poll_sync()\n\n    def poll_sync(self):', 1)
 if 'text="SINHRONIZUJ"' not in s:
@@ -51,5 +53,43 @@ if "self.after(0,lambda:self._apply_sync(" in s:
 '''
         s=s.replace("    def poll_sync(self):",code+"    def poll_sync(self):",1)
         s=s.replace("        self.sync_running=False\n        self.after(1200,self.poll_sync)","        self.sync_running=False\n        self.sync_results=queue.Queue()\n        self.after(250,self.drain_sync_results)\n        self.after(1200,self.poll_sync)",1)
+
+# VERIFIED FIX: SQLite and Tkinter may only be used on the UI thread.
+needle='threading.Thread(target=self._sync_thread,args=(host,business_date,snapshot),daemon=True).start()'
+assert needle in s
+s=s.replace(needle,'threading.Thread(target=self._sync_thread,args=(host,business_date,snapshot,center_token(self.db)),daemon=True).start()',1)
+assert 'def _sync_thread(self,host,business_date,snapshot):' in s
+s=s.replace('def _sync_thread(self,host,business_date,snapshot):','def _sync_thread(self,host,business_date,snapshot,token):',1)
+assert '            token=center_token(self.db)\\n' in s
+s=s.replace('            token=center_token(self.db)\\n','',1)
+assert 'self.after(0,lambda:self._apply_sync(business_date,results,None))' in s
+s=s.replace('self.after(0,lambda:self._apply_sync(business_date,results,None))','self.sync_results.put((business_date,results,None))',1)
+needle='try:self.after(0,lambda:self._apply_sync(business_date,[],msg))\\n            except RuntimeError:pass'
+assert needle in s
+s=s.replace(needle,'self.sync_results.put((business_date,[],msg))')
+assert '        self.sync_running=False\\n        self.after(1200,self.poll_sync)' in s
+s=s.replace('        self.sync_running=False\\n        self.after(1200,self.poll_sync)','        self.sync_running=False\\n        self.sync_results=queue.Queue()\\n        self.after(250,self.drain_sync_results)\\n        self.after(1200,self.poll_sync)',1)
+code='''    def drain_sync_results(self):
+        try:
+            while True:
+                day,results,error=self.sync_results.get_nowait()
+                self._apply_sync(day,results,error)
+        except queue.Empty:
+            pass
+        self.after(250,self.drain_sync_results)
+
+'''
+s=s.replace('    def poll_sync(self):',code+'    def poll_sync(self):',1)
+# Existing phone values win over unsynced stale PC data.
+needle='                if item["pending_send"] and item["confirmed_total"]:\\n                    # If the remote was changed since the last successful sync,'
+assert needle in s
+s=s.replace(needle,'                if item["pending_send"] and item["confirmed_total"]:\\n                    if not baseline and number(remote_total)!=number(item["confirmed_total"]):\\n                        results.append((item,"remote",remote))\\n                        continue\\n                    # If the remote was changed since the last successful sync,',1)
+needle='                elif baseline and number(remote_total)!=number(baseline):'
+assert needle in s
+s=s.replace(needle,'                elif (not baseline and not item["pending_send"]) or (baseline and number(remote_total)!=number(baseline)):',1)
+worker=s.split('    def _sync_thread(',1)[1].split('    def _apply_sync(',1)[0]
+assert 'self.db' not in worker and 'self.after(' not in worker
 p.write_text(s,encoding="utf-8")
+print("V1 sync thread patch applied")
+
 print("Patch applied successfully")
