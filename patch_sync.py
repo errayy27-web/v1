@@ -40,4 +40,35 @@ s=s.replace(needle,'''    def admin_reset(self):
 needle='        ttk.Button(head,text="SINHRONIZUJ",command=self.manual_sync).pack(side="right",padx=(7,0))'
 assert needle in s
 s=s.replace(needle,needle+'\\n        ttk.Button(head,text="ADMIN RESET",command=self.admin_reset).pack(side="right",padx=(7,0))')
+# Tkinter must only be called on the UI thread; network workers return via Queue.
+s=s.replace('import hashlib, hmac','import hashlib, hmac, queue',1)
+needle='        self.sync_running=False'
+assert needle in s
+s=s.replace(needle,needle+'\\n        self.sync_results=queue.Queue()',1)
+needle='    def poll_sync(self):'
+assert needle in s
+s=s.replace(needle,'''    def drain_sync_results(self):
+        try:
+            while True:
+                day, results, error=self.sync_results.get_nowait()
+                self._apply_sync(day,results,error)
+        except queue.Empty:
+            pass
+        self.after(250,self.drain_sync_results)
+
+'''+needle)
+# schedule UI queue processor at startup without changing existing polling timer
+needle='        self.sync_results=queue.Queue()'
+assert needle in s
+s=s.replace(needle,needle+'\\n        self.after(250,self.drain_sync_results)',1)
+# Worker must never access Tk or SQLite. Resolve token before spawning.
+needle='threading.Thread(target=self._sync_thread,args=(host,business_date,snapshot),daemon=True).start()'
+assert needle in s
+s=s.replace(needle,'threading.Thread(target=self._sync_thread,args=(host,business_date,snapshot,center_token(self.db)),daemon=True).start()')
+s=s.replace('def _sync_thread(self,host,business_date,snapshot):','def _sync_thread(self,host,business_date,snapshot,token):')
+s=s.replace('            token=center_token(self.db)\\n','')
+s=s.replace('self.after(0,lambda:self._apply_sync(business_date,results,None))','self.sync_results.put((business_date,results,None))')
+s=s.replace('try:self.after(0,lambda:self._apply_sync(business_date,[],msg))\\n            except RuntimeError:pass','self.sync_results.put((business_date,[],msg))')
+assert 'self.sync_results.put((business_date,results,None))' in s
+assert 'self.sync_results.put((business_date,[],msg))' in s
 p.write_text(s,encoding="utf-8")
