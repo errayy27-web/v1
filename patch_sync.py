@@ -55,31 +55,26 @@ if 'text="ADMIN RESET"' not in s:
 p.write_text(s,encoding="utf-8")
 print("Patch completed")
 
-# Bidirectional employee-name synchronization; preserve local cash denominations and history.
+
+# Sync employee names and totals, including zero. Do not alter counted denominations.
 if 'synced_employee' not in s:
-    s=s.replace('    c.execute("CREATE TABLE IF NOT EXISTS cash_counts (', '''    if "synced_employee" not in {r[1] for r in c.execute("PRAGMA table_info(shifts)")}:
-        c.execute("ALTER TABLE shifts ADD COLUMN synced_employee TEXT DEFAULT ''")
-    c.execute("CREATE TABLE IF NOT EXISTS cash_counts (''',1)
+    s=s.replace('"pending_send":"INTEGER NOT NULL DEFAULT 0"}.items()', '"pending_send":"INTEGER NOT NULL DEFAULT 0","synced_employee":"TEXT DEFAULT \'\'"}.items()',1)
     s=s.replace('SELECT remote_revision,remote_id,synced_total,remote_override,confirmed_total,locked_worker,pending_send FROM shifts', 'SELECT remote_revision,remote_id,synced_total,remote_override,confirmed_total,locked_worker,pending_send,synced_employee FROM shifts',1)
-    s=s.replace('pending_send=bool(r[6]) if r else False))','pending_send=bool(r[6]) if r else False, synced_employee=r[7] if r else ""))',1)
-    s=s.replace('if number(remote_total)==number(item["confirmed_total"]):','if number(remote_total)==number(item["confirmed_total"]) and (remote.get("employee_name") or "") == (item["locked_worker"] or item["employee"]):',1)
-    s=s.replace('patch={"delivered_cash":float(number(item["confirmed_total"])),','patch={"employee_name":item["locked_worker"] or item["employee"],\n                           "delivered_cash":float(number(item["confirmed_total"])),',1)
-    s=s.replace('if baseline and number(remote_total)!=number(baseline):','if baseline and (number(remote_total)!=number(baseline) or (item["synced_employee"] and (remote.get("employee_name") or "") != item["synced_employee"])):',1)
-    s=s.replace('elif (not baseline and not item["pending_send"]) or (baseline and number(remote_total)!=number(baseline)):', 'elif (not baseline and not item["pending_send"]) or (baseline and (number(remote_total)!=number(baseline) or (item["synced_employee"] and (remote.get("employee_name") or "") != item["synced_employee"]))):',1)
-    anchor='            remote_total=str(remote.get("delivered_cash") or "0")\n            if state=="remote":'
-    replacement='''            remote_total=str(remote.get("delivered_cash") or "0")
-            remote_worker=str(remote.get("employee_name") or "").strip()
-            if state in ("remote","ok","sent") and remote_worker and not item["pending_send"]:
-                if panel.employee.get().strip()!=remote_worker:
-                    panel.loading=True
-                    try: panel.employee.set(remote_worker)
-                    finally: panel.loading=False
+    s=s.replace('pending_send=bool(r[6]) if r else False))', 'pending_send=bool(r[6]) if r else False,synced_employee=r[7] if r else ""))',1)
+    s=s.replace('if baseline and number(remote_total)!=number(baseline):', 'if baseline and (number(remote_total)!=number(baseline) or (item["synced_employee"] and str(remote.get("employee_name") or "")!=item["synced_employee"])):',1)
+    s=s.replace('if number(remote_total)==number(item["confirmed_total"]):', 'if number(remote_total)==number(item["confirmed_total"]) and str(remote.get("employee_name") or "")==(item["locked_worker"] or item["employee"]):',1)
+    s=s.replace('patch={"delivered_cash":float(number(item["confirmed_total"])),', 'patch={"employee_name":item["locked_worker"] or item["employee"],"delivered_cash":float(number(item["confirmed_total"])),',1)
+    s=s.replace('elif baseline and number(remote_total)!=number(baseline):','elif baseline and (number(remote_total)!=number(baseline) or (item["synced_employee"] and str(remote.get("employee_name") or "")!=item["synced_employee"])):',1)
+    s=s.replace('            if state=="remote":\n                panel.remote_label', '''            remote_worker=str(remote.get("employee_name") or "").strip()
+            if state in ("remote","ok","sent") and not item["pending_send"]:
+                panel.loading=True
+                try: panel.employee.set(remote_worker)
+                finally: panel.loading=False
                 panel.locked_worker=remote_worker
-            if state=="remote":'''
-    if anchor not in s: raise RuntimeError("Employee sync insertion point not found")
-    s=s.replace(anchor,replacement,1)
-    s=s.replace('synced_total,remote_override,pending_send)\n                    VALUES(?,?,?,?,?,?,?,?)','synced_total,remote_override,pending_send,synced_employee,employee,locked_worker)\n                    VALUES(?,?,?,?,?,?,?,?,?,?,?)',1)
-    s=s.replace('pending_send=excluded.pending_send"""','pending_send=excluded.pending_send,\n                    synced_employee=excluded.synced_employee,\n                    employee=CASE WHEN excluded.pending_send=0 AND excluded.synced_employee!="" THEN excluded.employee ELSE shifts.employee END,\n                    locked_worker=CASE WHEN excluded.pending_send=0 AND excluded.synced_employee!="" THEN excluded.locked_worker ELSE shifts.locked_worker END"""',1)
-    s=s.replace('0 if state in ("sent","remote") else int(item["pending_send"])))','0 if state in ("sent","remote") else int(item["pending_send"]),\n                     remote_worker,remote_worker,remote_worker))',1)
+            if state=="remote":
+                panel.remote_label''',1)
+    s=s.replace('synced_total,remote_override,pending_send)\n                    VALUES(?,?,?,?,?,?,?,?)', 'synced_total,remote_override,pending_send,synced_employee)\n                    VALUES(?,?,?,?,?,?,?,?,?)',1)
+    s=s.replace('pending_send=excluded.pending_send"""','pending_send=excluded.pending_send,synced_employee=excluded.synced_employee,\n                    employee=CASE WHEN excluded.pending_send=0 THEN excluded.synced_employee ELSE shifts.employee END,\n                    locked_worker=CASE WHEN excluded.pending_send=0 THEN excluded.synced_employee ELSE shifts.locked_worker END"""',1)
+    s=s.replace('0 if state in ("sent","remote") else int(item["pending_send"])))', '0 if state in ("sent","remote") else int(item["pending_send"]),remote_worker))',1)
 p.write_text(s,encoding="utf-8")
-print("Employee synchronization patch applied")
+print("Patch completed")
