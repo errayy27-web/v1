@@ -71,4 +71,11 @@ s=s.replace('self.after(0,lambda:self._apply_sync(business_date,results,None))',
 s=s.replace('try:self.after(0,lambda:self._apply_sync(business_date,[],msg))\\n            except RuntimeError:pass','self.sync_results.put((business_date,[],msg))')
 assert 'self.sync_results.put((business_date,results,None))' in s
 assert 'self.sync_results.put((business_date,[],msg))' in s
+# Never overwrite a pre-existing phone shift when no successful PC baseline exists.
+needle='                if item["pending_send"] and item["confirmed_total"]:\n                    # If the remote was changed since the last successful sync,'
+assert needle in s
+s=s.replace(needle,'                if item["pending_send"] and item["confirmed_total"]:\n                    if not baseline and number(remote_total)!=number(item["confirmed_total"]):\n                        results.append((item,"remote",remote))\n                        continue\n                    # If the remote was changed since the last successful sync,')
+needle='                elif baseline and number(remote_total)!=number(baseline):'
+assert needle in s
+s=s.replace(needle,'                elif (not baseline and not item["pending_send"]) or (baseline and number(remote_total)!=number(baseline)):')
 p.write_text(s,encoding="utf-8")
