@@ -3,7 +3,7 @@ import ast
 p=Path("source/SS_OIL_SMJENE.py")
 s=p.read_text(encoding="utf-8")
 s=s.replace("import sqlite3, os, json, urllib.request, urllib.parse, urllib.error, threading, uuid, sys","import sqlite3, os, json, urllib.request, urllib.parse, urllib.error, threading, uuid, sys, queue")
-s=s.replace("        self.sync_running=False\\n        self.after(1200,self.poll_sync)","        self.sync_running=False\\n        self.sync_results=queue.Queue()\\n        self.after(250,self.drain_sync_results)\\n        self.after(1200,self.poll_sync)")
+s=s.replace("        self.sync_running=False\n        self.after(1200,self.poll_sync)","        self.sync_running=False\n        self.sync_results=queue.Queue()\n        self.after(250,self.drain_sync_results)\n        self.after(1200,self.poll_sync)")
 s=s.replace("    def poll_sync(self):",'''    def drain_sync_results(self):
         try:
             while True:
@@ -51,15 +51,15 @@ if 'text="ADMIN RESET"' not in s:
 s=s.replace('        self.combo=ttk.Combobox(wr,textvariable=self.employee,font=("Segoe UI",9))',
             '        self.combo=ttk.Combobox(wr,textvariable=self.employee,font=("Segoe UI",11))',1)
 s=s.replace('        ttk.Button(wr,text="+",width=3,command=self.save_employee).pack(side="left",padx=(4,0))',
-            '        self.worker_add_button=ttk.Button(wr,text="+",width=3,command=self.save_employee)\\n        self.worker_add_button.pack(side="left",padx=(4,0))',1)
+            '        self.worker_add_button=ttk.Button(wr,text="+",width=3,command=self.save_employee)\n        self.worker_add_button.pack(side="left",padx=(4,0))',1)
 s=s.replace('        for i,d in enumerate(DENOMS,1):',
-            '        self.count_entries=[]\\n        for i,d in enumerate(DENOMS,1):',1)
+            '        self.count_entries=[]\n        for i,d in enumerate(DENOMS,1):',1)
 s=s.replace('            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)',
-            '            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)\\n            self.count_entries.append(entry)',1)
+            '            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)\n            self.count_entries.append(entry)',1)
 s=s.replace('        ttk.Entry(row,textvariable=var,justify="right",font=("Segoe UI",9),width=11).pack(side="right")',
-            '        entry=ttk.Entry(row,textvariable=var,justify="right",font=("Segoe UI",11),width=11)\\n        entry.pack(side="right")\\n        if not hasattr(self,"extra_entries"):self.extra_entries=[]\\n        self.extra_entries.append(entry)',1)
-s=s.replace('    def update_save_button(self):\\n        if self.save_count>=2:',
-            '    def update_save_button(self):\\n        locked=self.save_count>=2\\n        self.combo.configure(state="disabled" if locked else "normal")\\n        self.worker_add_button.configure(state="disabled" if locked else "normal")\\n        for entry in self.count_entries+getattr(self,"extra_entries",[]):entry.configure(state="disabled" if locked else "normal")\\n        if locked:',1)
+            '        entry=ttk.Entry(row,textvariable=var,justify="right",font=("Segoe UI",11),width=11)\n        entry.pack(side="right")\n        if not hasattr(self,"extra_entries"):self.extra_entries=[]\n        self.extra_entries.append(entry)',1)
+s=s.replace('    def update_save_button(self):\n        if self.save_count>=2:',
+            '    def update_save_button(self):\n        locked=self.save_count>=2\n        self.combo.configure(state="disabled" if locked else "normal")\n        self.worker_add_button.configure(state="disabled" if locked else "normal")\n        for entry in self.count_entries+getattr(self,"extra_entries",[]):entry.configure(state="disabled" if locked else "normal")\n        if locked:',1)
 assert 'locked=self.save_count>=2' in s
 ast.parse(s)
 p.write_text(s,encoding="utf-8")
