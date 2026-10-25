@@ -2,6 +2,17 @@ from pathlib import Path
 import ast
 p=Path("source/SS_OIL_SMJENE.py")
 s=p.read_text(encoding="utf-8")
+s=s.replace("import sqlite3, os, json, urllib.request, urllib.parse, urllib.error, threading, uuid, sys","import sqlite3, os, json, urllib.request, urllib.parse, urllib.error, threading, uuid, sys, queue")
+s=s.replace("        self.sync_running=False\\n        self.after(1200,self.poll_sync)","        self.sync_running=False\\n        self.sync_results=queue.Queue()\\n        self.after(250,self.drain_sync_results)\\n        self.after(1200,self.poll_sync)")
+s=s.replace("    def poll_sync(self):",'''    def drain_sync_results(self):
+        try:
+            while True:
+                date_key,results,error=self.sync_results.get_nowait()
+                self._apply_sync(date_key,results,error)
+        except queue.Empty:pass
+        if self.winfo_exists():self.after(250,self.drain_sync_results)
+
+    def poll_sync(self):''',1)
 s=s.replace("args=(host,business_date,snapshot),daemon=True","args=(host,business_date,snapshot,center_token(self.db)),daemon=True")
 a=s.index("    def _sync_thread(self,host,business_date,snapshot")
 b=s.index("    def close(self):",a)
