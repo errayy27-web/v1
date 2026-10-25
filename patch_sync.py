@@ -46,6 +46,21 @@ if 'text="ADMIN RESET"' not in s:
     anchor='        ttk.Button(head,text="MERKEZ 8767",command=self.server_settings).pack(side="right",padx=(7,0))'
     assert anchor in s
     s=s.replace(anchor,anchor+'\n        ttk.Button(head,text="ADMIN RESET",command=self.admin_reset).pack(side="right",padx=(7,0))',1)
+
+# Lock ONLY the shift that has been saved twice; other shifts stay editable.
+s=s.replace('        self.combo=ttk.Combobox(wr,textvariable=self.employee,font=("Segoe UI",9))',
+            '        self.combo=ttk.Combobox(wr,textvariable=self.employee,font=("Segoe UI",11))',1)
+s=s.replace('        ttk.Button(wr,text="+",width=3,command=self.save_employee).pack(side="left",padx=(4,0))',
+            '        self.worker_add_button=ttk.Button(wr,text="+",width=3,command=self.save_employee)\\n        self.worker_add_button.pack(side="left",padx=(4,0))',1)
+s=s.replace('        for i,d in enumerate(DENOMS,1):',
+            '        self.count_entries=[]\\n        for i,d in enumerate(DENOMS,1):',1)
+s=s.replace('            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)',
+            '            entry.grid(row=i,column=1,sticky="ew",padx=2,pady=0)\\n            self.count_entries.append(entry)',1)
+s=s.replace('        ttk.Entry(row,textvariable=var,justify="right",font=("Segoe UI",9),width=11).pack(side="right")',
+            '        entry=ttk.Entry(row,textvariable=var,justify="right",font=("Segoe UI",11),width=11)\\n        entry.pack(side="right")\\n        if not hasattr(self,"extra_entries"):self.extra_entries=[]\\n        self.extra_entries.append(entry)',1)
+s=s.replace('        if self.save_count>=2:\\n            self.save_button.configure(state="disabled",text="ZAKLJUČANO (2/2)")',
+            '        locked=self.save_count>=2\\n        self.combo.configure(state="disabled" if locked else "normal")\\n        self.worker_add_button.configure(state="disabled" if locked else "normal")\\n        for entry in self.count_entries+getattr(self,"extra_entries",[]):entry.configure(state="disabled" if locked else "normal")\\n        if locked:\\n            self.save_button.configure(state="disabled",text="ZAKLJUČANO (2/2)")',1)
+assert 'locked=self.save_count>=2' in s
 ast.parse(s)
 p.write_text(s,encoding="utf-8")
 print("V1 send-only patch validated")
