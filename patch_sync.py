@@ -10,4 +10,34 @@ s=s.replace(needle,'    def manual_sync(self):\n        self.status.set("Provjer
 needle='            self.status.set("8767 greška: "+error[:65])'
 assert needle in s
 s=s.replace(needle,needle+'\n            for panel in self.panels:\n                if panel.confirmed_total:\n                    panel.remote_label.set("LOKALNO SAČUVANO • slanje nije potvrđeno")')
+# Administrator may reset the employee's two-save counter for one selected shift.
+# This does not delete counts or change any center/phone record.
+s=s.replace('from pathlib import Path','from pathlib import Path\\nimport hashlib, hmac',1)
+needle='    def poll_sync(self):'
+assert needle in s
+s=s.replace(needle,'''    def admin_reset(self):
+        from tkinter import simpledialog, messagebox
+        selected=simpledialog.askinteger("Administrator", "Broj smjene (1-3):",
+            parent=self,minvalue=1,maxvalue=3)
+        if selected is None:return
+        pin=simpledialog.askstring("Administrator", "Unesite PIN:",show="*",parent=self)
+        if pin is None:return
+        digest=lambda value:hashlib.sha256(value.encode("utf-8")).digest()
+        if not hmac.compare_digest(digest(pin),digest("3729")):
+            messagebox.showerror("Greška","Pogrešan PIN.",parent=self)
+            return
+        if not messagebox.askyesno("Potvrda",
+                "Resetovati 2 prava čuvanja za smjenu "+str(selected)+"?\\\\n"
+                "Postojeći iznosi i zapisi ostaju sačuvani.",parent=self):return
+        day=self.selected.isoformat()
+        with self.db:
+            self.db.execute("UPDATE shifts SET save_count=0 WHERE business_date=? AND shift=?",
+                            (day,selected))
+        self.panels[selected-1].load()
+        messagebox.showinfo("Gotovo","Prava čuvanja su resetovana (0/2).",parent=self)
+
+'''+needle)
+needle='        ttk.Button(head,text="SINHRONIZUJ",command=self.manual_sync).pack(side="right",padx=(7,0))'
+assert needle in s
+s=s.replace(needle,needle+'\\n        ttk.Button(head,text="ADMIN RESET",command=self.admin_reset).pack(side="right",padx=(7,0))')
 p.write_text(s,encoding="utf-8")
